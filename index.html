@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Code Sentinel — 3D Experience + Agenda</title>
+  <meta name="description" content="Plataforma 3D con música ambiental, agenda de citas y WhatsApp flotante." />
+
+  <style>
+    :root{
+      --bg:#070816;
+      --panel:rgba(255,255,255,.06);
+      --panel2:rgba(255,255,255,.10);
+      --text:rgba(255,255,255,.88);
+      --muted:rgba(255,255,255,.62);
+      --line:rgba(255,255,255,.14);
+      --accent:#7cf7ff;
+      --accent2:#b37cff;
+      --good:#2bff88;
+      --warn:#ffd166;
+      --bad:#ff4d6d;
+      --shadow: 0 18px 70px rgba(0,0,0,.45);
+      --radius:18px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      color:var(--text);
+      background: radial-gradient(1200px 800px at 20% 10%, rgba(179,124,255,.20), transparent 60%),
+                  radial-gradient(900px 700px at 90% 20%, rgba(124,247,255,.18), transparent 55%),
+                  linear-gradient(180deg, #050615, #070816 40%, #050615);
+      overflow:hidden;
+    }
+
+    /* --- 3D canvas fills background --- */
+    #stage{
+      position:fixed; inset:0;
+      width:100vw; height:100vh;
+      z-index:0;
+      display:block;
+    }
+
+    /* --- HUD layout --- */
+    .hud{
+      position:fixed; inset:0;
+      z-index:2;
+      display:grid;
+      grid-template-columns: 1fr minmax(320px, 420px);
+      gap:16px;
+      padding:16px;
+      pointer-events:none;
+    }
+
+    @media (max-width: 980px){
+      .hud{ grid-template-columns: 1fr; padding:12px; }
+      .right{ order:2; }
+      .left{ order:1; }
+    }
+
+    .left, .right{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      pointer-events:none;
+    }
+
+    .card{
+      pointer-events:auto;
+      background: linear-gradient(180deg, var(--panel), rgba(255,255,255,.04));
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+    }
+
+    .card-header{
+      padding:14px 14px 10px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+
+    .brand{
+      display:flex; gap:10px; align-items:center;
+      min-width:0;
+    }
+
+    .logo{
+      width:40px; height:40px;
+      border-radius:12px;
+      background: radial-gradient(circle at 30% 30%, rgba(124,247,255,.85), rgba(179,124,255,.85));
+      box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 18px 45px rgba(124,247,255,.12);
+      position:relative;
+      overflow:hidden;
+    }
+    .logo:before{
+      content:"";
+      position:absolute; inset:-40%;
+      background: conic-gradient(from 180deg, rgba(255,255,255,.0), rgba(255,255,255,.35), rgba(255,255,255,.0));
+      animation: spin 5.2s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .brand h1{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .brand p{
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.35;
+      max-width:52ch;
+    }
+
+    .actions{
+      display:flex; gap:10px; align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .btn{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 12px;
+      font-weight:600;
+      font-size:12px;
+      cursor:pointer;
+      transition: transform .12s ease, background .2s ease, border .2s ease;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.28); }
+    .btn:active{ transform: translateY(0px) scale(.99); }
+    .btn.primary{
+      border-color: rgba(124,247,255,.45);
+      background: linear-gradient(180deg, rgba(124,247,255,.22), rgba(179,124,255,.18));
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.25);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .dot{
+      width:10px; height:10px; border-radius:50%;
+      background: var(--good);
+      box-shadow: 0 0 20px rgba(43,255,136,.35);
+    }
+    .dot.off{ background: rgba(255,255,255,.18); box-shadow:none; }
+
+    .content{
+      padding:14px;
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+    }
+    @media (max-width: 980px){
+      .grid2{ grid-template-columns: 1fr; }
+    }
+
+    .stat{
+      padding:12px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      background: rgba(0,0,0,.20);
+    }
+    .stat b{ display:block; font-size:20px; margin-bottom:6px; letter-spacing:.02em; }
+    .stat span{ color:var(--muted); font-size:12px; line-height:1.4; }
+
+    /* --- Calendar --- */
+    .cal{
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .cal-top{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+    }
+    .cal-top .title{
+      font-weight:800; letter-spacing:.02em;
+      display:flex; align-items:center; gap:10px;
+    }
+    .cal-top .title small{ color:var(--muted); font-weight:600; }
+    .cal-nav{
+      display:flex; gap:8px;
+    }
+    .mini{
+      padding:8px 10px; border-radius:12px;
+      font-size:12px;
+    }
+
+    .cal-grid{
+      display:grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap:8px;
+    }
+    .dow{
+      color:var(--muted);
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      padding:6px 6px 2px;
+    }
+    .day{
+      position:relative;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+      border-radius:14px;
+      min-height:56px;
+      padding:8px 8px 10px;
+      cursor:pointer;
+      transition: transform .12s ease, border .2s ease, background .2s ease;
+      overflow:hidden;
+    }
+    .day:hover{ transform: translateY(-1px); border-color: rgba(124,247,255,.35); background: rgba(0,0,0,.22); }
+    .day.muted{ opacity:.42; }
+    .day.selected{ border-color: rgba(179,124,255,.55); box-shadow: 0 0 0 2px rgba(179,124,255,.12) inset; }
+    .day .num{ font-weight:800; font-size:12px; }
+    .day .count{
+      position:absolute; right:8px; top:8px;
+      font-size:11px; color: rgba(255,255,255,.70);
+      background: rgba(124,247,255,.14);
+      border:1px solid rgba(124,247,255,.22);
+      padding:2px 6px;
+      border-radius:999px;
+    }
+
+    /* --- Booking form + list --- */
+    label{ display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+    input, textarea, select{
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color:var(--text);
+      border-radius:14px;
+      padding:10px 12px;
+      outline:none;
+      font-size:13px;
+    }
+    input:focus, textarea:focus, select:focus{
+      border-color: rgba(124,247,255,.55);
+      box-shadow: 0 0 0 3px rgba(124,247,255,.12);
+    }
+    textarea{ min-height:84px; resize:vertical; }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    @media (max-width: 980px){
+      .row{ grid-template-columns: 1fr; }
+    }
+
+    .list{
+      display:flex; flex-direction:column; gap:10px;
+      max-height: 260px;
+      overflow:auto;
+      padding-right:4px;
+    }
+    .item{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      background: rgba(0,0,0,.20);
+      padding:10px 10px;
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      align-items:flex-start;
+      animation: pop .25s ease both;
+    }
+    @keyframes pop { from{ transform:translateY(6px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+
+    .item .meta{ min-width:0; }
+    .item .meta b{ display:block; font-size:13px; margin-bottom:4px; }
+    .item .meta small{ color:var(--muted); display:block; line-height:1.35; }
+    .item .rightBtns{ display:flex; gap:8px; }
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:11px;
+      color: rgba(255,255,255,.72);
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      padding:3px 8px;
+      border-radius:999px;
+      margin-top:6px;
+    }
+    .tag strong{ color: var(--accent); }
+    .danger{ border-color: rgba(255,77,109,.30)!important; }
+    .danger:hover{ background: rgba(255,77,109,.10)!important; }
+
+    /* --- Floating WhatsApp button --- */
+    .wa{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      z-index:5;
+      pointer-events:auto;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-decoration:none;
+      color: var(--text);
+      padding:12px 14px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.16);
+      background: linear-gradient(180deg, rgba(43,255,136,.18), rgba(0,0,0,.28));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      transition: transform .14s ease, filter .2s ease;
+    }
+    .wa:hover{ transform: translateY(-2px); filter: brightness(1.05); }
+    .wa .ico{
+      width:36px; height:36px;
+      border-radius:12px;
+      background: rgba(43,255,136,.18);
+      border:1px solid rgba(43,255,136,.35);
+      display:grid; place-items:center;
+      position:relative;
+      overflow:hidden;
+    }
+    .wa .ico:before{
+      content:"";
+      position:absolute; inset:-55%;
+      background: conic-gradient(from 90deg, rgba(255,255,255,0), rgba(255,255,255,.35), rgba(255,255,255,0));
+      animation: spin 4.2s linear infinite;
+      opacity:.65;
+    }
+    .wa span{ font-weight:800; letter-spacing:.02em; font-size:13px; }
+    .wa small{ display:block; color:var(--muted); font-weight:600; font-size:11px; margin-top:1px; }
+
+    /* --- tiny toast --- */
+    .toast{
+      position:fixed; left:50%; bottom:20px;
+      transform:translateX(-50%);
+      z-index:10;
+      pointer-events:none;
+      opacity:0;
+      transition: opacity .2s ease, transform .2s ease;
+      background: rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.16);
+      border-radius:999px;
+      padding:10px 14px;
+      color: rgba(255,255,255,.9);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      font-size:12px;
+    }
+    .toast.on{ opacity:1; transform:translateX(-50%) translateY(-6px); }
+
+    /* small footer hint */
+    .hint{
+      color: var(--muted);
+      font-size:11px;
+      line-height:1.35;
+    }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono";
+      font-size: 11px;
+      color: rgba(255,255,255,.8);
+      border: 1px solid rgba(255,255,255,.18);
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.06);
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="stage" aria-hidden="true"></canvas>
+
+  <div class="hud">
+    <div class="left">
+      <div class="card">
+        <div class="card-header">
+          <div class="brand">
+            <div class="logo" aria-hidden="true"></div>
+            <div style="min-width:0">
+              <h1>AI Code Sentinel</h1>
+              <p>Experiencia 3D + agenda de citas + WhatsApp. Todo listo para demo de agencia.</p>
+            </div>
+          </div>
+
+          <div class="actions">
+            <div class="pill" title="Estado de música ambiental">
+              <span class="dot off" id="musicDot"></span>
+              <span id="musicState">Música: OFF</span>
+            </div>
+            <button class="btn primary" id="btnMusic">Activar música</button>
+            <button class="btn" id="btnFocus">Modo foco</button>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="grid2">
+            <div class="stat">
+              <b id="statToday">—</b>
+              <span>Citas hoy (guardadas localmente en tu navegador).</span>
+            </div>
+            <div class="stat">
+              <b id="statMonth">—</b>
+              <span>Citas este mes.</span>
+            </div>
+          </div>
+
+          <div style="height:10px"></div>
+          <div class="hint">
+            Controles: <span class="kbd">Arrastrar</span> rota el 3D · <span class="kbd">Scroll</span> zoom · <span class="kbd">Doble tap</span> cambia “vibe”.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-weight:900; letter-spacing:.03em;">Agenda de Citas</div>
+            <div style="color:var(--muted); font-size:12px; margin-top:4px;">Selecciona un día y agrega una cita. Se guarda en tu navegador.</div>
+          </div>
+          <div class="actions">
+            <button class="btn mini" id="btnExport">Exportar (JSON)</button>
+            <button class="btn mini danger" id="btnClear">Borrar todo</button>
+          </div>
+        </div>
+
+        <div class="content cal">
+          <div class="cal-top">
+            <div class="title">
+              <span id="calLabel">—</span>
+              <small id="calSub">—</small>
+            </div>
+            <div class="cal-nav">
+              <button class="btn mini" id="prevMonth">◀</button>
+              <button class="btn mini" id="todayBtn">Hoy</button>
+              <button class="btn mini" id="nextMonth">▶</button>
+            </div>
+          </div>
+
+          <div class="cal-grid" id="dowRow"></div>
+          <div class="cal-grid" id="calGrid"></div>
+
+          <div style="height:8px"></div>
+
+          <div class="row">
+            <div>
+              <label>Fecha seleccionada</label>
+              <input id="dateInput" type="date" />
+            </div>
+            <div>
+              <label>Hora</label>
+              <input id="timeInput" type="time" value="10:00" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>Cliente / contacto</label>
+              <input id="whoInput" type="text" placeholder="Ej. Restaurante La Piazza" />
+            </div>
+            <div>
+              <label>Tipo</label>
+              <select id="typeInput">
+                <option value="Landing">Landing</option>
+                <option value="Web">Web</option>
+                <option value="Automatización">Automatización</option>
+                <option value="Soporte">Soporte</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label>Notas</label>
+            <textarea id="noteInput" placeholder="Qué se va a hacer, requisitos, etc."></textarea>
+          </div>
+
+          <div class="actions" style="justify-content:flex-start; padding-top:6px;">
+            <button class="btn primary" id="btnAdd">Guardar cita</button>
+            <button class="btn" id="btnQuick">Crear cita rápida (15 min)</button>
+          </div>
+
+          <div style="height:10px"></div>
+          <div style="font-weight:900; letter-spacing:.03em;">Citas del día</div>
+          <div class="list" id="list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-weight:900; letter-spacing:.03em;">Panel 3D</div>
+            <div style="color:var(--muted); font-size:12px; margin-top:4px;">Visual “neón” con texturas generadas localmente.</div>
+          </div>
+          <div class="actions">
+            <button class="btn mini" id="btnVibe">Cambiar vibe</button>
+            <button class="btn mini" id="btnResetCam">Reset cámara</button>
+          </div>
+        </div>
+        <div class="content">
+          <div class="stat">
+            <b>Demo lista para cliente</b>
+            <span>
+              Esto es un “template premium” base. Tú le cambias copy, colores y CTA, y ya tienes demo vendible.
+            </span>
+          </div>
+          <div style="height:12px"></div>
+          <div class="stat">
+            <b>Integración fácil</b>
+            <span>
+              Luego lo conectamos a Google Calendar / Sheets / CRM si el cliente paga. Ahorita es local para demo rápida.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-weight:900; letter-spacing:.03em;">Notas rápidas</div>
+            <div style="color:var(--muted); font-size:12px; margin-top:4px;">Ajustes clave para que esto venda.</div>
+          </div>
+        </div>
+        <div class="content">
+          <div class="hint">
+            1) Cambia el número WhatsApp abajo.<br/>
+            2) Cambia textos de “experiencia 3D” al nicho del cliente.<br/>
+            3) Agrega 3 screenshots de proyectos reales (después).<br/>
+            4) Luego conectamos agenda a backend o Google Calendar.<br/>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WhatsApp Floating -->
+  <a class="wa" id="waBtn" href="#" target="_blank" rel="noopener">
+    <div class="ico" aria-hidden="true">
+      <!-- simple whatsapp-ish glyph -->
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="position:relative; z-index:1">
+        <path d="M20 11.8a8 8 0 0 1-11.9 7L4 20l1.3-3.8A8 8 0 1 1 20 11.8Z" stroke="rgba(255,255,255,.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9.2 9.3c.2-.5.4-.6.8-.6h.7c.2 0 .4.1.5.4l.7 1.6c.1.3.1.6-.1.8l-.5.6c.6 1.1 1.6 2 2.8 2.6l.6-.5c.2-.2.5-.2.8-.1l1.7.7c.3.1.4.3.4.6v.7c0 .4-.1.6-.6.8-.7.4-1.7.2-2.7-.3-2.8-1.3-5-3.8-6.1-6.7-.4-1.1-.5-2 .1-2.6Z" fill="rgba(255,255,255,.9)"/>
+      </svg>
+    </div>
+    <div>
+      <span>WhatsApp</span>
+      <small>Respuesta rápida</small>
+    </div>
+  </a>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Three.js -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+    /********************
+     *  Helpers
+     ********************/
+    const $ = (id) => document.getElementById(id);
+    const toastEl = $("toast");
+    function toast(msg){
+      toastEl.textContent = msg;
+      toastEl.classList.add("on");
+      clearTimeout(toastEl._t);
+      toastEl._t = setTimeout(()=> toastEl.classList.remove("on"), 1600);
+    }
+    function pad2(n){ return String(n).padStart(2,"0"); }
+    function ymd(d){
+      return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    }
+    function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+    /********************
+     *  WhatsApp link (EDITA AQUÍ)
+     ********************/
+    const WHATSAPP_NUMBER = "521XXXXXXXXXX"; // <-- Pon tu número en formato internacional (MX: 52 + 1 + 10 dígitos)
+    const WA_DEFAULT_TEXT = "Hola, quiero información de AI Code Sentinel. ¿Me apoyas?";
+    function updateWhatsAppLink(){
+      const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WA_DEFAULT_TEXT)}`;
+      $("waBtn").href = url;
+    }
+    updateWhatsAppLink();
+
+    /********************
+     *  Ambient music (local) — Web Audio
+     ********************/
+    let audioCtx = null;
+    let master = null;
+    let isMusicOn = false;
+    let musicNodes = [];
+    let vibe = 0;
+
+    function setMusicUI(on){
+      $("musicDot").classList.toggle("off", !on);
+      $("musicState").textContent = on ? "Música: ON" : "Música: OFF";
+      $("btnMusic").textContent = on ? "Apagar música" : "Activar música";
+    }
+
+    function stopMusic(){
+      if(!audioCtx) return;
+      musicNodes.forEach(n => { try{ n.stop && n.stop(); }catch(e){} });
+      musicNodes = [];
+      isMusicOn = false;
+      setMusicUI(false);
+      toast("Música OFF");
+    }
+
+    function startMusic(){
+      if(!audioCtx){
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        master = audioCtx.createGain();
+        master.gain.value = 0.16;
+        master.connect(audioCtx.destination);
+      }
+      // resume needed on mobile sometimes
+      audioCtx.resume();
+
+      // Clear old
+      musicNodes.forEach(n => { try{ n.stop && n.stop(); }catch(e){} });
+      musicNodes = [];
+
+      // Create a subtle ambient pad + pulse using oscillators
+      const now = audioCtx.currentTime;
+
+      // Vibe presets
+      const presets = [
+        { base: 110, chord:[1, 5/4, 3/2], lfo: 0.10, pulse: 0.55 },
+        { base: 98,  chord:[1, 6/5, 8/5], lfo: 0.14, pulse: 0.42 },
+        { base: 131, chord:[1, 4/3, 2],   lfo: 0.09, pulse: 0.62 },
+      ];
+      const p = presets[vibe % presets.length];
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1600;
+      filter.Q.value = 0.7;
+
+      const reverbLike = audioCtx.createDelay();
+      reverbLike.delayTime.value = 0.18;
+      const feedback = audioCtx.createGain();
+      feedback.gain.value = 0.25;
+      reverbLike.connect(feedback);
+      feedback.connect(reverbLike);
+
+      const wet = audioCtx.createGain(); wet.gain.value = 0.35;
+      const dry = audioCtx.createGain(); dry.gain.value = 0.85;
+
+      // routing
+      filter.connect(dry); dry.connect(master);
+      filter.connect(reverbLike); reverbLike.connect(wet); wet.connect(master);
+
+      // LFO for gentle movement
+      const lfo = audioCtx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = p.lfo;
+
+      const lfoGain = audioCtx.createGain();
+      lfoGain.gain.value = 140;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+
+      lfo.start(now);
+      musicNodes.push(lfo);
+
+      // Pad oscillators
+      p.chord.forEach((ratio, i)=>{
+        const osc = audioCtx.createOscillator();
+        osc.type = (i===0) ? "sine" : "triangle";
+        osc.frequency.value = p.base * ratio;
+
+        const g = audioCtx.createGain();
+        g.gain.value = 0.0;
+
+        // slow attack
+        g.gain.setValueAtTime(0.0, now);
+        g.gain.linearRampToValueAtTime(0.065, now + 2.4);
+        g.gain.linearRampToValueAtTime(0.050, now + 6.0);
+
+        osc.connect(g);
+        g.connect(filter);
+
+        osc.start(now);
+        musicNodes.push(osc);
+      });
+
+      // Soft pulse
+      const pulseOsc = audioCtx.createOscillator();
+      pulseOsc.type = "sine";
+      pulseOsc.frequency.value = p.base * 2;
+
+      const pulseGain = audioCtx.createGain();
+      pulseGain.gain.value = 0.0;
+
+      pulseOsc.connect(pulseGain);
+      pulseGain.connect(filter);
+
+      // pattern
+      let t = now;
+      for(let k=0;k<64;k++){
+        const on = (k % 4 === 0) ? p.pulse : (k % 8 === 4 ? p.pulse*0.6 : p.pulse*0.25);
+        pulseGain.gain.setValueAtTime(0.0, t);
+        pulseGain.gain.linearRampToValueAtTime(0.045*on, t+0.03);
+        pulseGain.gain.exponentialRampToValueAtTime(0.0008, t+0.22);
+        t += 0.35;
+      }
+
+      pulseOsc.start(now);
+      musicNodes.push(pulseOsc);
+
+      isMusicOn = true;
+      setMusicUI(true);
+      toast("Música ON");
+    }
+
+    $("btnMusic").addEventListener("click", ()=>{
+      if(isMusicOn) stopMusic(); else startMusic();
+    });
+
+    /********************
+     *  Calendar + bookings (localStorage)
+     ********************/
+    const STORAGE_KEY = "aics_bookings_v1";
+
+    function loadBookings(){
+      try{
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      }catch(e){
+        return [];
+      }
+    }
+    function saveBookings(list){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    }
+
+    let bookings = loadBookings(); // {id, date(YYYY-MM-DD), time(HH:MM), who, type, note, createdAt}
+    let viewDate = new Date();
+    let selectedDate = new Date();
+
+    const DOW = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+    function renderDOW(){
+      const el = $("dowRow");
+      el.innerHTML = "";
+      DOW.forEach(d=>{
+        const div = document.createElement("div");
+        div.className = "dow";
+        div.textContent = d;
+        el.appendChild(div);
+      });
+    }
+
+    function startOfMonth(d){
+      return new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    function endOfMonth(d){
+      return new Date(d.getFullYear(), d.getMonth()+1, 0);
+    }
+    function mondayIndex(jsDay){
+      // JS: 0=Sun..6=Sat -> we want 0=Mon..6=Sun
+      return (jsDay + 6) % 7;
+    }
+    function countForDate(dateStr){
+      return bookings.filter(b=>b.date===dateStr).length;
+    }
+
+    function renderCalendar(){
+      const monthStart = startOfMonth(viewDate);
+      const monthEnd = endOfMonth(viewDate);
+      const year = viewDate.getFullYear();
+      const month = viewDate.getMonth();
+
+      const label = viewDate.toLocaleString("es-MX", { month:"long", year:"numeric" });
+      $("calLabel").textContent = label.replace(/^\w/, c=>c.toUpperCase());
+
+      const selStr = ymd(selectedDate);
+      $("calSub").textContent = `Seleccionado: ${selStr}`;
+
+      const grid = $("calGrid");
+      grid.innerHTML = "";
+
+      // build days with leading/trailing
+      const lead = mondayIndex(monthStart.getDay());
+      const totalDays = monthEnd.getDate();
+
+      // previous month days
+      const prevMonthEnd = new Date(year, month, 0).getDate();
+      for(let i=lead-1; i>=0; i--){
+        const dayNum = prevMonthEnd - i;
+        const d = new Date(year, month-1, dayNum);
+        grid.appendChild(dayCell(d, true));
+      }
+
+      // current month days
+      for(let day=1; day<=totalDays; day++){
+        const d = new Date(year, month, day);
+        grid.appendChild(dayCell(d, false));
+      }
+
+      // trailing to fill grid nice (up to 6 rows)
+      const cells = grid.children.length;
+      const target = (cells <= 35) ? 35 : 42;
+      const remain = target - cells;
+      for(let r=1; r<=remain; r++){
+        const d = new Date(year, month+1, r);
+        grid.appendChild(dayCell(d, true));
+      }
+
+      // update inputs and list
+      $("dateInput").value = selStr;
+      updateStats();
+      renderList();
+    }
+
+    function dayCell(d, isMuted){
+      const div = document.createElement("div");
+      div.className = "day" + (isMuted ? " muted" : "");
+      const ds = ymd(d);
+      const c = countForDate(ds);
+
+      const num = document.createElement("div");
+      num.className = "num";
+      num.textContent = d.getDate();
+
+      div.appendChild(num);
+
+      if(c>0){
+        const badge = document.createElement("div");
+        badge.className = "count";
+        badge.textContent = c;
+        div.appendChild(badge);
+      }
+
+      const sel = ymd(selectedDate);
+      if(ds === sel){
+        div.classList.add("selected");
+      }
+
+      div.addEventListener("click", ()=>{
+        selectedDate = d;
+        // If user clicks muted day, also switch view month
+        if(isMuted){
+          viewDate = new Date(d.getFullYear(), d.getMonth(), 1);
+        }
+        renderCalendar();
+      });
+
+      return div;
+    }
+
+    function updateStats(){
+      const todayStr = ymd(new Date());
+      const monthStr = `${viewDate.getFullYear()}-${pad2(viewDate.getMonth()+1)}`;
+      const todayCount = bookings.filter(b=>b.date===todayStr).length;
+      const monthCount = bookings.filter(b=>b.date.startsWith(monthStr)).length;
+
+      $("statToday").textContent = todayCount;
+      $("statMonth").textContent = monthCount;
+    }
+
+    function renderList(){
+      const list = $("list");
+      const ds = $("dateInput").value || ymd(selectedDate);
+      const items = bookings
+        .filter(b=>b.date===ds)
+        .sort((a,b)=> (a.time||"").localeCompare(b.time||""));
+
+      list.innerHTML = "";
+      if(items.length===0){
+        const empty = document.createElement("div");
+        empty.className = "hint";
+        empty.textContent = "No hay citas para este día. Crea una y queda guardada.";
+        list.appendChild(empty);
+        return;
+      }
+
+      items.forEach(b=>{
+        const div = document.createElement("div");
+        div.className = "item";
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.innerHTML = `
+          <b>${escapeHtml(b.time)} — ${escapeHtml(b.who || "Sin nombre")}</b>
+          <small><span class="tag"><strong>${escapeHtml(b.type||"Otro")}</strong> · ${escapeHtml(b.date)}</span></small>
+          ${b.note ? `<small style="margin-top:6px;">${escapeHtml(b.note)}</small>` : `<small style="margin-top:6px;">(sin notas)</small>`}
+        `;
+
+        const right = document.createElement("div");
+        right.className = "rightBtns";
+
+        const btnEdit = document.createElement("button");
+        btnEdit.className = "btn mini";
+        btnEdit.textContent = "Editar";
+        btnEdit.onclick = ()=>{
+          $("dateInput").value = b.date;
+          $("timeInput").value = b.time || "10:00";
+          $("whoInput").value = b.who || "";
+          $("typeInput").value = b.type || "Otro";
+          $("noteInput").value = b.note || "";
+          $("btnAdd").textContent = "Actualizar cita";
+          $("btnAdd").dataset.editId = b.id;
+          toast("Editando cita…");
+        };
+
+        const btnDel = document.createElement("button");
+        btnDel.className = "btn mini danger";
+        btnDel.textContent = "Borrar";
+        btnDel.onclick = ()=>{
+          bookings = bookings.filter(x=>x.id!==b.id);
+          saveBookings(bookings);
+          toast("Cita eliminada");
+          renderCalendar();
+        };
+
+        right.appendChild(btnEdit);
+        right.appendChild(btnDel);
+
+        div.appendChild(meta);
+        div.appendChild(right);
+        list.appendChild(div);
+      });
+    }
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, s=>({
+        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"
+      }[s]));
+    }
+
+    $("prevMonth").addEventListener("click", ()=>{
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()-1, 1);
+      renderCalendar();
+    });
+    $("nextMonth").addEventListener("click", ()=>{
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 1);
+      renderCalendar();
+    });
+    $("todayBtn").addEventListener("click", ()=>{
+      viewDate = new Date();
+      selectedDate = new Date();
+      renderCalendar();
+      toast("Hoy");
+    });
+
+    $("dateInput").addEventListener("change", (e)=>{
+      const val = e.target.value;
+      if(!val) return;
+      const [Y,M,D] = val.split("-").map(Number);
+      selectedDate = new Date(Y, M-1, D);
+      // Keep view month aligned
+      viewDate = new Date(Y, M-1, 1);
+      renderCalendar();
+    });
+
+    $("btnAdd").addEventListener("click", ()=>{
+      const date = $("dateInput").value || ymd(selectedDate);
+      const time = $("timeInput").value || "10:00";
+      const who  = $("whoInput").value.trim();
+      const type = $("typeInput").value;
+      const note = $("noteInput").value.trim();
+
+      const editId = $("btnAdd").dataset.editId;
+
+      if(editId){
+        const idx = bookings.findIndex(b=>b.id===editId);
+        if(idx>=0){
+          bookings[idx] = { ...bookings[idx], date, time, who, type, note };
+          saveBookings(bookings);
+          $("btnAdd").textContent = "Guardar cita";
+          delete $("btnAdd").dataset.editId;
+          toast("Cita actualizada");
+        }
+      } else {
+        const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+        bookings.push({ id, date, time, who, type, note, createdAt: Date.now() });
+        saveBookings(bookings);
+        toast("Cita guardada");
+      }
+
+      // tidy
+      $("whoInput").value = "";
+      $("noteInput").value = "";
+      renderCalendar();
+    });
+
+    $("btnQuick").addEventListener("click", ()=>{
+      const date = $("dateInput").value || ymd(selectedDate);
+      const t = $("timeInput").value || "10:00";
+      const [hh,mm] = t.split(":").map(Number);
+      const start = new Date(2000,0,1,hh,mm,0);
+      start.setMinutes(start.getMinutes()+15);
+      $("timeInput").value = `${pad2(start.getHours())}:${pad2(start.getMinutes())}`;
+      $("whoInput").value = $("whoInput").value || "Cita rápida";
+      $("typeInput").value = $("typeInput").value || "Soporte";
+      $("noteInput").value = $("noteInput").value || "Seguimiento / revisión.";
+      toast("Rápida: +15 min");
+    });
+
+    $("btnClear").addEventListener("click", ()=>{
+      if(!confirm("¿Borrar TODAS las citas guardadas en este navegador?")) return;
+      bookings = [];
+      saveBookings(bookings);
+      toast("Todo borrado");
+      renderCalendar();
+    });
+
+    $("btnExport").addEventListener("click", ()=>{
+      const data = JSON.stringify(bookings, null, 2);
+      const blob = new Blob([data], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "aicodesentinel-bookings.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("Exportado");
+    });
+
+    /********************
+     *  Three.js 3D Scene
+     *  - Textures generated locally with Canvas
+     ********************/
+    const canvas = $("stage");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050615, 0.055);
+
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 120);
+    camera.position.set(0, 0.6, 7.2);
+
+    // Lights
+    const hemi = new THREE.HemisphereLight(0x7cf7ff, 0x110022, 0.75);
+    scene.add(hemi);
+
+    const key = new THREE.PointLight(0xb37cff, 1.2, 40);
+    key.position.set(5, 3, 6);
+    scene.add(key);
+
+    const rim = new THREE.PointLight(0x7cf7ff, 0.95, 40);
+    rim.position.set(-6, 1.6, 3);
+    scene.add(rim);
+
+    // Generate a neon texture (local)
+    function makeNeonTexture(seed=1){
+      const c = document.createElement("canvas");
+      c.width = 512; c.height = 512;
+      const g = c.getContext("2d");
+
+      // background
+      const grd = g.createRadialGradient(256,256,10,256,256,280);
+      grd.addColorStop(0, `rgba(124,247,255,${0.18 + 0.02*seed})`);
+      grd.addColorStop(0.45, `rgba(179,124,255,${0.12 + 0.02*seed})`);
+      grd.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grd;
+      g.fillRect(0,0,512,512);
+
+      // rings
+      for(let i=0;i<18;i++){
+        const r = 40 + i*12;
+        g.beginPath();
+        g.arc(256,256,r,0,Math.PI*2);
+        g.strokeStyle = `rgba(255,255,255,${0.06})`;
+        g.lineWidth = 2;
+        g.stroke();
+      }
+
+      // glitch lines
+      for(let i=0;i<70;i++){
+        const y = Math.random()*512;
+        const w = 120 + Math.random()*300;
+        const x = Math.random()*(512-w);
+        g.fillStyle = `rgba(124,247,255,${Math.random()*0.08})`;
+        g.fillRect(x,y,w,1 + Math.random()*2);
+      }
+
+      // symbols
+      g.font = "bold 18px ui-monospace, monospace";
+      g.fillStyle = "rgba(255,255,255,.10)";
+      for(let i=0;i<90;i++){
+        const x = Math.random()*512;
+        const y = Math.random()*512;
+        const ch = ["A","I","S","C","0","1","/","<",">","{","}"][Math.floor(Math.random()*11)];
+        g.fillText(ch, x, y);
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1.2, 1.2);
+      return tex;
+    }
+
+    let texA = makeNeonTexture(1);
+    let texB = makeNeonTexture(2);
+
+    // Portal ring
+    const ringGeo = new THREE.TorusGeometry(1.55, 0.12, 32, 180);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x7cf7ff,
+      emissiveIntensity: 1.15,
+      metalness: 0.55,
+      roughness: 0.2,
+      map: texA
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI * 0.5;
+    scene.add(ring);
+
+    // Inner disc
+    const discGeo = new THREE.CircleGeometry(1.25, 64);
+    const discMat = new THREE.MeshStandardMaterial({
+      color: 0x0b0c18,
+      emissive: 0xb37cff,
+      emissiveIntensity: 0.55,
+      metalness: 0.2,
+      roughness: 0.4,
+      map: texB,
+      transparent: true,
+      opacity: 0.96
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.position.z = -0.15;
+    scene.add(disc);
+
+    // Particles
+    const pCount = 2200;
+    const pGeo = new THREE.BufferGeometry();
+    const pos = new Float32Array(pCount * 3);
+    const col = new Float32Array(pCount * 3);
+    for(let i=0;i<pCount;i++){
+      const r = 2.2 + Math.random()*7.0;
+      const a = Math.random()*Math.PI*2;
+      const y = (Math.random()-0.5)*5.0;
+      pos[i*3+0] = Math.cos(a)*r;
+      pos[i*3+1] = y;
+      pos[i*3+2] = Math.sin(a)*r;
+
+      // color blend
+      const t = Math.random();
+      const c1 = new THREE.Color(0x7cf7ff);
+      const c2 = new THREE.Color(0xb37cff);
+      const cc = c1.lerp(c2, t);
+      col[i*3+0] = cc.r;
+      col[i*3+1] = cc.g;
+      col[i*3+2] = cc.b;
+    }
+    pGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    pGeo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+
+    const pMat = new THREE.PointsMaterial({
+      size: 0.028,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite:false
+    });
+    const particles = new THREE.Points(pGeo, pMat);
+    scene.add(particles);
+
+    // Orbit controls (lightweight, custom)
+    let isDown=false;
+    let lastX=0,lastY=0;
+    let yaw=0, pitch=0.15;
+    let targetZoom = 7.2;
+
+    function resetCam(){
+      yaw = 0;
+      pitch = 0.15;
+      targetZoom = 7.2;
+      toast("Cámara reseteada");
+    }
+    $("btnResetCam").addEventListener("click", resetCam);
+
+    function resize(){
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    canvas.addEventListener("pointerdown", (e)=>{
+      isDown=true;
+      lastX=e.clientX; lastY=e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("pointerup", ()=> isDown=false);
+    canvas.addEventListener("pointermove", (e)=>{
+      if(!isDown) return;
+      const dx = (e.clientX-lastX)/window.innerWidth;
+      const dy = (e.clientY-lastY)/window.innerHeight;
+      lastX=e.clientX; lastY=e.clientY;
+      yaw   += dx * 3.2;
+      pitch += dy * 2.6;
+      pitch = clamp(pitch, -0.35, 0.55);
+    });
+    canvas.addEventListener("wheel", (e)=>{
+      targetZoom += e.deltaY * 0.0025;
+      targetZoom = clamp(targetZoom, 4.8, 10.5);
+    }, {passive:true});
+
+    // Vibe switching: changes emissive + textures + fog density
+    function applyVibe(v){
+      vibe = (vibe + v + 999) % 3;
+
+      // swap textures
+      texA = makeNeonTexture(1 + vibe);
+      texB = makeNeonTexture(2 + vibe);
+      ringMat.map = texA;
+      discMat.map = texB;
+      ringMat.needsUpdate = true;
+      discMat.needsUpdate = true;
+
+      if(vibe===0){
+        ringMat.emissive.setHex(0x7cf7ff);
+        discMat.emissive.setHex(0xb37cff);
+        scene.fog.density = 0.055;
+        pMat.size = 0.028;
+      } else if(vibe===1){
+        ringMat.emissive.setHex(0xb37cff);
+        discMat.emissive.setHex(0x7cf7ff);
+        scene.fog.density = 0.045;
+        pMat.size = 0.032;
+      } else {
+        ringMat.emissive.setHex(0xffffff);
+        discMat.emissive.setHex(0x7cf7ff);
+        scene.fog.density = 0.060;
+        pMat.size = 0.026;
+      }
+      toast("Vibe cambiado");
+      // if music is on, restart with new vibe profile
+      if(isMusicOn){ startMusic(); }
+    }
+
+    $("btnVibe").addEventListener("click", ()=> applyVibe(1));
+    let lastTap = 0;
+    canvas.addEventListener("click", ()=>{
+      const now = Date.now();
+      if(now - lastTap < 320){
+        applyVibe(1);
+      }
+      lastTap = now;
+    });
+
+    // Focus mode: hide right panel
+    let focus = false;
+    $("btnFocus").addEventListener("click", ()=>{
+      focus = !focus;
+      document.querySelector(".right").style.display = focus ? "none" : "flex";
+      toast(focus ? "Modo foco ON" : "Modo foco OFF");
+    });
+
+    // animate
+    const clock = new THREE.Clock();
+    function tick(){
+      const t = clock.getElapsedTime();
+
+      // portal motion
+      ring.rotation.z = t * 0.65;
+      ring.rotation.y = Math.sin(t*0.6)*0.15;
+
+      disc.rotation.z = -t * 0.25;
+      disc.position.z = -0.15 + Math.sin(t*1.2)*0.03;
+
+      // particle swirl
+      const p = pGeo.attributes.position.array;
+      for(let i=0;i<pCount;i++){
+        const ix = i*3;
+        const x = p[ix+0], y = p[ix+1], z = p[ix+2];
+        const a = Math.atan2(z, x);
+        const r = Math.sqrt(x*x + z*z);
+        const aa = a + 0.0008 + Math.sin(t*0.6 + y)*0.00045;
+        p[ix+0] = Math.cos(aa)*r;
+        p[ix+2] = Math.sin(aa)*r;
+      }
+      pGeo.attributes.position.needsUpdate = true;
+
+      // camera orbit from yaw/pitch/zoom
+      const zoom = targetZoom;
+      const cx = Math.sin(yaw) * zoom;
+      const cz = Math.cos(yaw) * zoom;
+      const cy = pitch * 6.0;
+      camera.position.set(cx, cy, cz);
+      camera.lookAt(0, 0.2, 0);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    // init calendar
+    renderDOW();
+    $("dateInput").value = ymd(selectedDate);
+    renderCalendar();
+
+    // If user hasn't set WA number, warn once
+    if(WHATSAPP_NUMBER.includes("X")){
+      setTimeout(()=> toast("⚠️ Cambia WHATSAPP_NUMBER en el código"), 1200);
+    }
+
+    // show music UI initial
+    setMusicUI(false);
+  </script>
+</body>
+</html>
